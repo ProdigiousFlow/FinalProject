@@ -5,13 +5,21 @@
 #include <SFML/Graphics.hpp>
 #include <SFPhysics.h>
 #include <vector>
+#include <chrono>
 #include <SFML/Audio.hpp>
 
 using namespace std;
 using namespace sf;
 using namespace sfp;
 
-const float M_SPEED = 0.2;
+const float M_SPEED = 0.4;
+
+int score(0);
+int lives(3);
+PhysicsSprite& monkey = *new PhysicsSprite();
+PhysicsRectangle bottom;
+Texture bananaTex;
+
 
 void LoadTex(Texture& tex, string filename) {
     if (!tex.loadFromFile(filename)) {
@@ -32,33 +40,73 @@ void MoveMonkey(PhysicsSprite& monkey, int elapsedMS) {
     }
 }
 
+void CreateBanana(World &world, RenderWindow &window, PhysicsShapeList<PhysicsSprite> &bananas) {
+    
+    
+    PhysicsSprite& banana = bananas.Create();
+    banana.setTexture(bananaTex);
+    banana.setCenter(Vector2f(rand() % 800, 50));
+    if (score < 100){
+        banana.setVelocity(Vector2f(0, 0.25));
+    } 
+    else if (score < 200) {
+        banana.setVelocity(Vector2f(0, 0.4));
+    }
+    else {
+        banana.setVelocity(Vector2f(0, 0.65));
+    }
+    world.AddPhysicsBody(banana);
+    window.draw(banana);
+    banana.onCollision =
+        [&world, &banana, &bananas, &window]
+        (PhysicsBodyCollisionResult result) {
+        if (result.object2 == monkey) {
+            world.RemovePhysicsBody(banana);
+            bananas.QueueRemove(banana);
+            monkey.setVelocity(Vector2f(0, 0));
+            banana.setVelocity(Vector2f(0, 0));
+            score += 10;
+            CreateBanana(world, window, bananas);
+        }
+        if (result.object2 == bottom) {
+            world.RemovePhysicsBody(banana);
+            bananas.QueueRemove(banana);
+            monkey.setVelocity(Vector2f(0, 0));
+            banana.setVelocity(Vector2f(0, 0));
+            lives -= 1;
+            CreateBanana(world, window, bananas);
+        }
+    };
+}
+
 Vector2f GetTextSize(Text text) {
     FloatRect r = text.getGlobalBounds();
     return Vector2f(r.width, r.height);
 }
 
-
+int createFlag = 1;
 int main()
 {
+    LoadTex(bananaTex, "images/banana.png");
     RenderWindow window(VideoMode(800, 600), "Banana Catcher");
     World world(Vector2f(0, 0));
-    int score(0);
-    int lives(20);
+    
 
     Music music;
     if (!music.openFromFile("jungle.ogg")) {
         cout << "Failed to load jungle.ogg ";
         exit(6);
     }
+    music.setVolume(15);
     music.play();
 
-    PhysicsSprite& monkey = *new PhysicsSprite();
+    
     Texture monkeyTex;
     LoadTex(monkeyTex, "images/monkey.png");
     monkey.setTexture(monkeyTex);
     Vector2f sz = monkey.getSize();
-    monkey.setCenter(Vector2f(400,
-        600 - (sz.y / 2)));
+    monkey.setCenter(Vector2f(400,600 - (sz.y / 2)));
+    world.AddPhysicsBody(monkey);
 
     PhysicsRectangle top;
     top.setSize(Vector2f(800, 10));
@@ -66,7 +114,6 @@ int main()
     top.setStatic(true);
     world.AddPhysicsBody(top);
 
-    PhysicsRectangle bottom;
     bottom.setSize(Vector2f(800, 10));
     bottom.setCenter(Vector2f(400, 595));
     bottom.setStatic(true);
@@ -85,29 +132,13 @@ int main()
     right.setStatic(true);
     world.AddPhysicsBody(right);
 
-    Texture bananaTex;
-    LoadTex(bananaTex, "images/banana.png");
+    
     PhysicsShapeList<PhysicsSprite> bananas;
-    for (int i(0); i < 2; i++) {
-        PhysicsSprite& banana = bananas.Create();
-        banana.setTexture(bananaTex);
-
-        banana.setCenter(Vector2f(1 + rand() % 800, 50));
-        banana.setVelocity(Vector2f(0, 0.25));
-        world.AddPhysicsBody(banana);
-        banana.onCollision =
-            [&monkey, &world, &bottom, &banana, &bananas, &score, &lives]
-            (PhysicsBodyCollisionResult result) {
-            if (result.object2 == monkey) {
-                world.RemovePhysicsBody(banana);
-                bananas.QueueRemove(banana);
-                score += 10;
-            }
-            if (result.object2 == bottom) {
-                world.RemovePhysicsBody(banana);
-                lives -= 1;
-            }
-            };
+    
+    for (int i(0); i < 1; i++) {
+        
+        CreateBanana(world, window, bananas);
+        
     }
 
     Font fnt;
@@ -135,19 +166,38 @@ int main()
                 window.draw((PhysicsSprite&)banana);
             }
 
-            window.draw(monkey);
-            Text scoreText;
-            scoreText.setString(to_string(score));
-            scoreText.setFont(fnt);
-            window.draw(scoreText);
 
-            window.display();
+            
         }
+        window.clear();
+        for (PhysicsShape& banana : bananas) {
+            window.draw((PhysicsSprite&)banana);
+        }
+        window.draw(monkey);
+        Text scoreText;
+        scoreText.setString(to_string(score));
+        scoreText.setFont(fnt);
+        window.draw(scoreText);
+
+        Text livesText;
+        livesText.setPosition(690 - GetTextSize(livesText).x, 0);
+        livesText.setString("Lives: " + to_string(lives));
+        livesText.setFont(fnt);
+        window.draw(livesText);
 
         window.display();
 
 
     }
+    window.display(); // this is needed to see the last frame
+    Text gameOverText;
+    gameOverText.setString("GAME OVER");
+    gameOverText.setFont(fnt);
+    sz = GetTextSize(gameOverText);
+    gameOverText.setPosition(400 - (sz.x / 2), 300 - (sz.y / 2));
+    window.draw(gameOverText);
+    window.display();
+    while (true);
 }
 
 
